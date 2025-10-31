@@ -4,17 +4,27 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include "RTClib.h"
+#include "SoftwareSerial.h"
+#include "DFRobotDFPlayerMini.h"
+
 
 #define DHTPIN 23
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
+RTC_DS1307 rtc;
+
 
 #define SCREEN_WIDTH 128  // OLED display in pixels
 #define SCREEN_HEIGHT 64
 
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET -1  // Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_RESET -1  
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+static const uint8_t PIN_MP3_TX = 26; 
+static const uint8_t PIN_MP3_RX = 27;  
+SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);
+DFRobotDFPlayerMini player;
 
 // Pin Diagram
 const int speakBtn = 1;
@@ -27,10 +37,13 @@ const int setBtn = 5;
 
 int alarmHrs = 10;
 int alarmMins = 20;
+int currentTime[3];
 bool isAlarmMode = false;
+char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
 void setup() {
   Serial.begin(921600);
+  softwareSerial.begin(921600);
   Serial.println("Started");
   // Pin Configuration
   pinMode(speakBtn, INPUT);
@@ -49,11 +62,28 @@ void setup() {
   display.display();
   delay(2000);
   display.clearDisplay();
+  if (!rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    Serial.flush();
+    while (1) delay(10);
+  }
+  if (player.begin(softwareSerial)) {
+    Serial.println("OK");
+    player.volume(20);  // max 30
+  } else {
+    Serial.println("Connecting to DFPlayer Mini failed!");
+  }
+  if (!rtc.isrunning()) {
+    Serial.println("RTC is NOT running, setting time!");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // This line sets the RTC with an explicit date & time, for example to set
+    // January 21, 2014 at 3am you would call:
+    //rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+  }
 }
 
 void loop() {
-  String time = String(getHours()) + ":" + String(getMinutes()) + ":" + String(getSeconds());
-  int temp = readTemp();
+  String time = formatTime();
   // Mode toggle
   static bool prevModeState = LOW;
   bool currentModeState = digitalRead(modeBtn);
@@ -65,7 +95,7 @@ void loop() {
 
   // Speak time
   if (digitalRead(speakBtn)) {
-    speak(time);
+    speak();
     delay(200);
   }
 
@@ -76,34 +106,39 @@ void loop() {
       setAlarm();
     }
   } else {
-    display(time, temp);
+    useDisplay(time);
   }
 }
+void getTime() {
+  DateTime now = rtc.now();
+  currentTime[0] = now.hour();
+  currentTime[1]=  now.minute();
+  currentTime[2]= now.second();
+  
+}
+String formatTime() {
+  String hourStr = (currentTime[0]< 10 ? "0" : "") + String(currentTime[0], DEC);
+  String minuteStr = (currentTime[1] < 10 ? "0" : "") + String(currentTime[1], DEC);
+  String secondStr = (currentTime[2] < 10 ? "0" : "") + String(currentTime[2], DEC);
+  String formattedTime = hourStr + ":" + minuteStr + ":" + secondStr;
+  Serial.println(formattedTime);
+  return formattedTime;
+}
 
-int getHours() {
-  return 12;
-}
-int getMinutes() {
-  return 32;
-}
-int getSeconds() {
-  return 1;
-}
-
-void display(String time, int temp) {
-    display.setTextColor(WHITE); 
-  display.setTextSize(2);     
+void useDisplay(String time) {
+  int temp = readTemp();
+  display.setTextColor(WHITE);
+  display.setTextSize(2);
   display.setCursor(0, 0);
-  display.write("Time : ")
-    display.write(time)// Start at top-left corner
-  Serial.println("Time : ", time);
-  Serial.println("Temperature : ", temp);
+  display.write("Time : ");
+  display.write(time);// Start at top-left corner
+  Serial.println("Time : " + time);
+  Serial.println("Temperature : "+ Str(temp));
 }
 
-void speak(String text) {
-  Serial.println("speak");
-  Serial.println(text);
-  Serial.println("speak");
+void speak() {
+  player.playFolder(1, currentTime[0]);
+  player.playFolder(2, currentTime[1]);
 }
 
 void displayAlarm() {
