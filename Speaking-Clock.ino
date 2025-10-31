@@ -17,9 +17,14 @@ RTC_DS1307 rtc;
 
 #define SCREEN_WIDTH 128  // OLED display in pixels
 #define SCREEN_HEIGHT 64
+#define OLED_MOSI   23
+#define OLED_CLK    18
+#define OLED_DC     16
+#define OLED_CS     5
+#define OLED_RESET  17
 
-#define OLED_RESET -1  
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT,
+  OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 static const uint8_t PIN_MP3_TX = 26; 
 static const uint8_t PIN_MP3_RX = 27;  
@@ -59,6 +64,8 @@ void setup() {
     for (;;)
       ;
   }
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
   display.display();
   delay(2000);
   display.clearDisplay();
@@ -131,9 +138,9 @@ void useDisplay(String time) {
   display.setTextSize(2);
   display.setCursor(0, 0);
   display.write("Time : ");
-  display.write(time);// Start at top-left corner
-  Serial.println("Time : " + time);
-  Serial.println("Temperature : "+ Str(temp));
+  display.write(time.c_str());
+  display.setCursor(0,1);
+  display.write(temp);
 }
 
 void speak() {
@@ -143,7 +150,7 @@ void speak() {
 
 void displayAlarm() {
   String alarmTime = String(alarmHrs) + ":" + String(alarmMins);
-  display(alarmTime);
+  useDisplay(alarmTime);
 }
 
 void setAlarm() {
@@ -170,7 +177,7 @@ int readTemp() {
   float t = dht.readTemperature();
   if (isnan(t)) {
     Serial.println("Failed reception");
-    return;
+    return 200;
   }
   return t;
 }
